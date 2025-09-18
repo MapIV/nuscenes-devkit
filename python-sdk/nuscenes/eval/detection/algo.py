@@ -187,3 +187,27 @@ def calc_tp(md: DetectionMetricData, min_recall: float, metric_name: str) -> flo
         return 1.0  # Assign 1 here. If this happens for all classes, the score for that TP metric will be 0.
     else:
         return float(np.mean(getattr(md, metric_name)[first_ind: last_ind + 1]))  # +1 to include error at max recall.
+
+# add cov method
+def load_ate_cov_by_class(csv_path="/workspace/data.csv"):
+    try:
+        # 文字列と数値を同時に読み込む（dtype=object で安全に）
+        data = np.loadtxt(csv_path, delimiter=",", dtype=str)
+    except OSError:
+        return {}  # ファイルが存在しない場合
+    except ValueError:
+        return {}  # 空ファイルなど読み込めない場合
+
+    if data.size == 0:
+        return {}
+
+    # 1列目: クラス名, 2列目: 値
+    classes = data[:, 0]
+    values = data[:, 1].astype(float)
+
+    ate_cov = {}
+    for cls in np.unique(classes):
+        vals = values[classes == cls]
+        ate_cov[cls] = float(np.var(vals, ddof=1)) if len(vals) >= 2 else 0.0
+
+    return ate_cov

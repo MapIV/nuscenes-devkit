@@ -14,7 +14,7 @@ from nuscenes import NuScenes
 from nuscenes.eval.common.config import config_factory
 from nuscenes.eval.common.data_classes import EvalBoxes
 from nuscenes.eval.common.loaders import load_prediction, load_gt, add_center_dist, filter_eval_boxes
-from nuscenes.eval.detection.algo import accumulate, calc_ap, calc_tp
+from nuscenes.eval.detection.algo import accumulate, calc_ap, calc_tp, load_ate_cov_by_class
 from nuscenes.eval.detection.constants import TP_METRICS
 from nuscenes.eval.detection.data_classes import DetectionConfig, DetectionMetrics, DetectionBox, \
     DetectionMetricDataList
@@ -61,7 +61,7 @@ class DetectionEval:
         self.result_path = result_path
         self.eval_set = eval_set
         self.output_dir = output_dir
-        self.verbose = verbose
+        self.verbose = True
         self.cfg = config
 
         # Check result file exists.
@@ -105,6 +105,7 @@ class DetectionEval:
         """
         start_time = time.time()
 
+        # TODO: 
         # -----------------------------------
         # Step 1: Accumulate metric data for all classes and distance thresholds.
         # -----------------------------------
@@ -137,6 +138,15 @@ class DetectionEval:
                 elif class_name in ['barrier'] and metric_name in ['attr_err', 'vel_err']:
                     tp = np.nan
                 else:
+                    # save data for calculate ATE_COV
+                    if metric_name == 'trans_err':
+                        first_ind = round(100 * self.cfg.min_recall) + 1
+                        last_ind  = metric_data.max_recall_ind
+                        if last_ind >= first_ind:
+                            arr = getattr(metric_data, metric_name)[first_ind:last_ind+1]
+                            with open('/workspace/data.csv', 'a') as f_handle:
+                                f_handle.write("\n".join(f"{class_name},{float(v)}" for v in arr) + "\n")
+
                     tp = calc_tp(metric_data, self.cfg.min_recall, metric_name)
                 metrics.add_label_tp(class_name, metric_name, tp)
 
@@ -180,6 +190,11 @@ class DetectionEval:
         :param render_curves: Whether to render PR and TP curves to disk.
         :return: A dict that stores the high-level metrics and meta data.
         """
+
+        # clean /workspace/data/csv file
+        open('/workspace/data.csv', 'w').close()
+    
+
         if plot_examples > 0:
             # Select a random but fixed subset to plot.
             random.seed(42)
@@ -231,20 +246,37 @@ class DetectionEval:
         print('NDS: %.4f' % (metrics_summary['nd_score']))
         print('Eval time: %.1fs' % metrics_summary['eval_time'])
 
+        # calculate cov by class
+        ate_cov_by_class = load_ate_cov_by_class("/workspace/data.csv")
+
         # Print per-class metrics.
         print()
         print('Per-class results:')
-        print('%-20s\t%-6s\t%-6s\t%-6s\t%-6s\t%-6s\t%-6s' % ('Object Class', 'AP', 'ATE', 'ASE', 'AOE', 'AVE', 'AAE'))
+        print('%-20s\t%-6s\t%-6s\t%-6s\t%-6s\t%-6s\t%-6s\t%-6s' % ('Object Class', 'AP', 'ATE', 'ATE_STDEV', 'ASE', 'AOE', 'AVE', 'AAE'))
         class_aps = metrics_summary['mean_dist_aps']
         class_tps = metrics_summary['label_tp_errors']
         for class_name in class_aps.keys():
-            print('%-20s\t%-6.3f\t%-6.3f\t%-6.3f\t%-6.3f\t%-6.3f\t%-6.3f'
+            ate_cov = ate_cov_by_class.get(class_name, float('nan'))
+            print('%-20s\t%-6.3f\t%-6.3f\t%-6.3f\t%-6.3f\t%-6.3f\t%-6.3f\t%-6.3f'
                 % (class_name, class_aps[class_name],
                     class_tps[class_name]['trans_err'],
+                    ate_cov,
                     class_tps[class_name]['scale_err'],
                     class_tps[class_name]['orient_err'],
                     class_tps[class_name]['vel_err'],
                     class_tps[class_name]['attr_err']))
+
+        # save to csv for graphing
+        with open("/workspace/metrics_per_class.csv", "w") as f:
+            f.write("class,AP,ATE,ATE_STDEV,ASE,AOE,AVE,AAE\n")
+            for class_name in class_aps.keys():
+                f.write(f"{class_name},{class_aps[class_name]},"
+                        f"{class_tps[class_name]['trans_err']},"
+                        f"{ate_cov_by_class.get(class_name, float('nan'))},"
+                        f"{class_tps[class_name]['scale_err']},"
+                        f"{class_tps[class_name]['orient_err']},"
+                        f"{class_tps[class_name]['vel_err']},"
+                        f"{class_tps[class_name]['attr_err']}\n")
 
         return metrics_summary
 
