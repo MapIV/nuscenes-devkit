@@ -57,12 +57,14 @@ class DetectionEval:
         :param output_dir: Folder to save plots and results to.
         :param verbose: Whether to print to stdout.
         """
+        print("Initializing detection evaluation*************")
         self.nusc = nusc
         self.result_path = result_path
         self.eval_set = eval_set
         self.output_dir = output_dir
         self.verbose = True
         self.cfg = config
+        verbose = self.verbose
 
         # Check result file exists.
         assert os.path.exists(result_path), 'Error: The result file does not exist!'
@@ -91,9 +93,14 @@ class DetectionEval:
         # Filter boxes (distance, points per box, etc.).
         if verbose:
             print('Filtering predictions')
+        max_range = 100
+        print(f"Limiting range detection to {max_range} meters")
+        for key in self.cfg.class_range:
+            self.cfg.class_range[key] = max_range
+
         self.pred_boxes = filter_eval_boxes(nusc, self.pred_boxes, self.cfg.class_range, verbose=verbose)
         if verbose:
-            print('Filtering ground truth annotations')
+            print('Filtering ground truth annotations', self.cfg.class_range)
         self.gt_boxes = filter_eval_boxes(nusc, self.gt_boxes, self.cfg.class_range, verbose=verbose)
 
         self.sample_tokens = self.gt_boxes.sample_tokens
@@ -103,6 +110,7 @@ class DetectionEval:
         Performs the actual evaluation.
         :return: A tuple of high-level and the raw metric data.
         """
+        print("Evaluating*************")
         start_time = time.time()
 
         # TODO: 
@@ -320,8 +328,8 @@ if __name__ == "__main__":
     config_path = args.config_path
     plot_examples_ = args.plot_examples
     render_curves_ = bool(args.render_curves)
-    verbose_ = bool(args.verbose)
-
+    verbose_ = True
+    print("Using config file: {}".format(config_path))
     if config_path == '':
         cfg_ = config_factory('detection_cvpr_2019')
     else:
