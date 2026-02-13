@@ -34,7 +34,15 @@ plt.style.use('seaborn-v0_8-whitegrid')
 # Define a map geometry type for polygons and lines.
 Geometry = Union[Polygon, LineString]
 
-locations = ['singapore-onenorth', 'singapore-hollandvillage', 'singapore-queenstown', 'boston-seaport']
+locations_data ={
+    'singapore-onenorth': [1585.6, 2025.0],
+    'singapore-hollandvillage': [2808.3, 2922.9],
+    'singapore-queenstown': [3228.6, 3687.1],
+    'boston-seaport': [2979.5, 2118.1],
+    # custom data
+    'nagoya_airport': [3000.0, 3000.0],
+
+}
 
 
 class NuScenesMap:
@@ -67,7 +75,8 @@ class NuScenesMap:
         :param map_name: Which map out of `singapore-onenorth`, `singepore-hollandvillage`, `singapore-queenstown`,
         `boston-seaport` that we want to load.
         """
-        assert map_name in locations, 'Error: Unknown map name %s!' % map_name
+        if map_name not in locations_data.keys():
+            print(f"Warning: Unknown map name {map_name}! Please modify the locations list of map_api.py.")
 
         self.dataroot = dataroot
         self.map_name = map_name
@@ -835,17 +844,12 @@ class NuScenesMapExplorer:
         :param canvas_size: Size of the output mask (h, w). If None, we use the default resolution of 10px/m.
         :return: Stacked numpy array of size [c x h x w] with c channels and the same width/height as the canvas.
         """
-        # For some combination of parameters, we need to know the size of the current map.
-        if self.map_api.map_name == 'singapore-onenorth':
-            map_dims = [1585.6, 2025.0]
-        elif self.map_api.map_name == 'singapore-hollandvillage':
-            map_dims = [2808.3, 2922.9]
-        elif self.map_api.map_name == 'singapore-queenstown':
-            map_dims = [3228.6, 3687.1]
-        elif self.map_api.map_name == 'boston-seaport':
-            map_dims = [2979.5, 2118.1]
-        else:
-            raise Exception('Error: Invalid map!')
+
+        if self.map_api.map_name not in locations_data:
+            map_dims = [100000, 100000]
+            print(f"Warning: Map dimensions for {self.map_api.map_name} not found. ")
+        
+        map_dims = locations_data[self.map_api.map_name]
 
         # If None, return the entire map.
         if patch_box is None:
